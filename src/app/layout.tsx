@@ -25,6 +25,13 @@ export const metadata: Metadata = {
   title: "3D-Medical — Volumetric machine learning for radiology",
   description:
     "An ETH Zurich Student Project House venture building 3D vision models for medical imaging — starting with intracranial aneurysm detection from CT angiography.",
+  icons: {
+    icon: [
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
+  },
   openGraph: {
     title: "3D-Medical",
     description:

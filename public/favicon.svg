@@ -1,4 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="14" fill="#020617"/>
-  <text x="50%" y="56%" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="700" fill="#22d3ee" text-anchor="middle" dominant-baseline="middle">3DM</text>
+  <!-- Stylised vessel-and-aneurysm glyph: a curving line with a single bulge,
+       readable as a "3D" mark even at 16×16 when the text would be lost. -->
+  <g fill="none" stroke="#22d3ee" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 50 C 14 30, 30 30, 32 20 C 34 12, 44 12, 50 18"/>
+  </g>
+  <circle cx="32" cy="20" r="5" fill="#22d3ee"/>
+  <circle cx="32" cy="20" r="9" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="2 3"/>
 </svg>
