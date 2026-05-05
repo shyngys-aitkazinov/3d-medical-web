@@ -1,25 +1,30 @@
 import { SphLogo } from "./SphLogo";
+import { EmailLink } from "./EmailLink";
 
-const links = [
+type LinkSpec =
+  | { kind: "external"; label: string; href: string }
+  | { kind: "email"; label: string; email: string };
+
+const links: LinkSpec[] = [
   {
+    kind: "external",
     label: "LinkedIn",
     href: "https://www.linkedin.com/in/shyngys-aitkazinov-00496b193/",
-    external: true,
   },
   {
+    kind: "external",
     label: "GitHub",
     href: "https://github.com/shyngys-aitkazinov",
-    external: true,
   },
   {
+    kind: "email",
     label: "saitkazinov@3d-medical.ch",
-    href: "mailto:saitkazinov@3d-medical.ch",
-    external: false,
+    email: "saitkazinov@3d-medical.ch",
   },
   {
+    kind: "email",
     label: "saitkazinov@ethz.ch",
-    href: "mailto:saitkazinov@ethz.ch",
-    external: false,
+    email: "saitkazinov@ethz.ch",
   },
 ];
 
@@ -56,19 +61,30 @@ export function Footer() {
               Contact
             </p>
             <ul className="space-y-2 text-sm">
-              {links.map((l) => (
-                <li key={l.href}>
-                  <a
-                    href={l.href}
-                    {...(l.external
-                      ? { target: "_blank", rel: "noreferrer" }
-                      : {})}
-                    className="text-ink-50/75 transition-colors hover:text-accent"
-                  >
-                    {l.label}
-                  </a>
-                </li>
-              ))}
+              {links.map((l) => {
+                const cls = "text-ink-50/75 transition-colors hover:text-accent";
+                if (l.kind === "email") {
+                  return (
+                    <li key={l.email}>
+                      <EmailLink email={l.email} className={cls}>
+                        {l.label}
+                      </EmailLink>
+                    </li>
+                  );
+                }
+                return (
+                  <li key={l.href}>
+                    <a
+                      href={l.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={cls}
+                    >
+                      {l.label}
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 

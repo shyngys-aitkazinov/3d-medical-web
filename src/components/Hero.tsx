@@ -1,5 +1,6 @@
 import { SphLogo } from "./SphLogo";
 import { VesselTree } from "./VesselTree";
+import { EmailLink } from "./EmailLink";
 
 export function Hero() {
   return (
@@ -43,27 +44,29 @@ export function Hero() {
             they make the news.
           </p>
           <div className="mt-12 flex flex-wrap items-center gap-x-6 gap-y-3">
-            <a
-              href="mailto:saitkazinov@3d-medical.ch"
+            <EmailLink
+              email="saitkazinov@3d-medical.ch"
               className="group inline-flex items-center gap-3 rounded-none border-b border-accent pb-1 text-sm font-medium uppercase tracking-[0.18em] text-ink-50 transition-colors hover:text-accent"
             >
-              Open a conversation
-              <svg
-                aria-hidden
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="transition-transform group-hover:translate-x-1"
-              >
-                <path d="M5 12h14" />
-                <path d="m12 5 7 7-7 7" />
-              </svg>
-            </a>
+              <span className="inline-flex items-center gap-3">
+                Open a conversation
+                <svg
+                  aria-hidden
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="transition-transform group-hover:translate-x-1"
+                >
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </span>
+            </EmailLink>
             <a
               href="#problem"
               className="font-mono text-[11px] uppercase tracking-[0.22em] text-ink-50/60 underline-offset-8 transition-colors hover:text-accent hover:underline"

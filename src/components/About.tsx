@@ -1,4 +1,5 @@
 import { SectionLabel } from "./SectionLabel";
+import { EmailLink } from "./EmailLink";
 
 const credits = [
   { year: "2025–", role: "ML Research Engineer", org: "Lyceum Technology" },
@@ -8,26 +9,30 @@ const credits = [
   { year: "2017–22", role: "B.Sc. EECS · Dean's List", org: "KAIST, South Korea" },
 ];
 
-const links = [
+type LinkSpec =
+  | { kind: "external"; label: string; href: string }
+  | { kind: "email"; label: string; email: string };
+
+const links: LinkSpec[] = [
   {
+    kind: "external",
     label: "LinkedIn / shyngys-aitkazinov",
     href: "https://www.linkedin.com/in/shyngys-aitkazinov-00496b193/",
-    external: true,
   },
   {
+    kind: "external",
     label: "GitHub / shyngys-aitkazinov",
     href: "https://github.com/shyngys-aitkazinov",
-    external: true,
   },
   {
+    kind: "email",
     label: "saitkazinov@3d-medical.ch",
-    href: "mailto:saitkazinov@3d-medical.ch",
-    external: false,
+    email: "saitkazinov@3d-medical.ch",
   },
   {
+    kind: "email",
     label: "saitkazinov@ethz.ch",
-    href: "mailto:saitkazinov@ethz.ch",
-    external: false,
+    email: "saitkazinov@ethz.ch",
   },
 ];
 
@@ -112,18 +117,28 @@ export function About() {
             </div>
 
             <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3">
-              {links.map((l) => (
-                <a
-                  key={l.href}
-                  href={l.href}
-                  {...(l.external
-                    ? { target: "_blank", rel: "noreferrer" }
-                    : {})}
-                  className="font-mono text-[11px] uppercase tracking-[0.22em] text-ink-50/65 underline-offset-8 transition-colors hover:text-accent hover:underline"
-                >
-                  → {l.label}
-                </a>
-              ))}
+              {links.map((l) => {
+                const cls =
+                  "font-mono text-[11px] uppercase tracking-[0.22em] text-ink-50/65 underline-offset-8 transition-colors hover:text-accent hover:underline";
+                if (l.kind === "email") {
+                  return (
+                    <EmailLink key={l.email} email={l.email} className={cls}>
+                      → {l.label}
+                    </EmailLink>
+                  );
+                }
+                return (
+                  <a
+                    key={l.href}
+                    href={l.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cls}
+                  >
+                    → {l.label}
+                  </a>
+                );
+              })}
             </div>
           </div>
         </div>
