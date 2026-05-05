@@ -39,45 +39,65 @@ jobs:
       - name: Verify build output
         run: test -f out/index.html && test -f out/founder.jpg
 
-      # Surgical cleanup: remove ONLY the Next.js hashed-chunk directory, which
-      # is the only thing that accumulates stale files between builds. We never
-      # touch:
-      #   • dotfiles (.htaccess, .user.ini, .infomaniak-maintenance.html) —
-      #     these are Infomaniak-owned and load-bearing.
-      #   • our own stable-named files (index.html, 404.html, founder.jpg,
-      #     favicon.svg, assets/) — SCP overwrites them in place.
-      # The `find ... -delete` form on _next is bounded to that exact subtree,
-      # so even if _next is missing or the path is wrong, nothing else dies.
-      - name: Clean stale Next.js chunks on host
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.INFOMANIAK_HOST }}
-          username: ${{ secrets.INFOMANIAK_USER }}
-          password: ${{ secrets.INFOMANIAK_PASSWORD }}
-          port: 22
-          script: |
-            set -eu
-            TARGET="/sites/3d-medical.ch"
-            test -d "$TARGET" || { echo "Target $TARGET missing — refusing to deploy."; exit 1; }
-            if [ -d "$TARGET/_next" ]; then
-              echo "Removing stale $TARGET/_next ..."
-              rm -rf -- "$TARGET/_next"
-            else
-              echo "No previous _next/ on host — first deploy."
-            fi
+      # Single-step deploy via sshpass + rsync.
+      #
+      # Why not appleboy/scp-action: it requires a hard-coded absolute target
+      # path. Infomaniak shared hosting puts the SSH user inside a chroot where
+      # ~ IS the site root — there is no stable absolute path to embed.
+      #
+      # Safety guards (in order):
+      #   1. Verify we're in the site root by requiring .htaccess to exist
+      #      before touching anything. If we land somewhere else, abort.
+      #   2. Surgically rm -rf _next (the only dir that accumulates stale
+      #      hashed chunks between builds).
+      #   3. rsync without --delete, so any remote-only file (.htaccess,
+      #      .user.ini, .infomaniak-maintenance.html — all Infomaniak-owned)
+      #      stays exactly where it is. Our build never produces dotfiles, so
+      #      the upload set is provably append/overwrite-only on stable names.
+      - name: Deploy to Infomaniak (rsync over SSH)
+        env:
+          SSHPASS: ${{ secrets.INFOMANIAK_PASSWORD }}
+          HOST: ${{ secrets.INFOMANIAK_HOST }}
+          USER: ${{ secrets.INFOMANIAK_USER }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass rsync
 
-      - name: Deploy to Infomaniak (SCP over SSH)
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.INFOMANIAK_HOST }}
-          username: ${{ secrets.INFOMANIAK_USER }}
-          password: ${{ secrets.INFOMANIAK_PASSWORD }}
-          port: 22
-          source: "out/."
-          target: "/sites/3d-medical.ch"
-          strip_components: 1
-          overwrite: true
-          # Do NOT enable rm here — that would wipe the entire target dir,
-          # including Infomaniak's .htaccess, .user.ini, and maintenance page.
-          # Cleanup is handled surgically by the SSH step above.
-          rm: false
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+
+          echo "::group::Probe remote site root"
+          sshpass -e ssh $SSH_OPTS "$USER@$HOST" '
+            set -eu
+            echo "Remote pwd: $(pwd)"
+            if [ ! -f .htaccess ]; then
+              echo "ABORT: $(pwd) does not contain .htaccess — refusing to deploy."
+              ls -la
+              exit 1
+            fi
+            echo "Site root verified."
+          '
+          echo "::endgroup::"
+
+          echo "::group::Clean stale _next/"
+          sshpass -e ssh $SSH_OPTS "$USER@$HOST" '
+            set -eu
+            if [ -d _next ]; then
+              echo "Removing stale _next/ ..."
+              rm -rf _next
+            else
+              echo "No previous _next/ — first deploy."
+            fi
+          '
+          echo "::endgroup::"
+
+          echo "::group::Upload out/ via rsync"
+          # -a archive (preserves times, perms — but Infomaniak forbids chmod
+          # on shared, so we strip --no-perms/owner/group to avoid noisy errors).
+          # No --delete: remote-only files (host dotfiles) are preserved.
+          sshpass -e rsync -rltvz --no-perms --no-owner --no-group \
+            -e "ssh $SSH_OPTS" \
+            out/ "$USER@$HOST:./"
+          echo "::endgroup::"
+
+          echo "Deploy complete."
