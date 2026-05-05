@@ -34,3 +34,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# tests
+/playwright-report
+/test-results
+/screenshots
+/coverage
+
+# playwright-mcp scratch (page snapshots / console logs from browser MCP)
+/.playwright-mcp
+
+# local scratch images dropped into the repo root by the IDE/screenshot tools
+/image.png
+/image*.png

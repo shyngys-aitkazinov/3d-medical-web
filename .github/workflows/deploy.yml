@@ -1,0 +1,83 @@
+name: Build & deploy to Infomaniak
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Don't let two deploys race; cancel an older one if a newer push lands.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ship:
+    name: Build, test, and deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests (Vitest)
+        run: npm test
+
+      - name: Build static export
+        run: npm run build
+
+      # The static export lands in ./out — that's what we ship.
+      - name: Verify build output
+        run: test -f out/index.html && test -f out/founder.jpg
+
+      # Surgical cleanup: remove ONLY the Next.js hashed-chunk directory, which
+      # is the only thing that accumulates stale files between builds. We never
+      # touch:
+      #   • dotfiles (.htaccess, .user.ini, .infomaniak-maintenance.html) —
+      #     these are Infomaniak-owned and load-bearing.
+      #   • our own stable-named files (index.html, 404.html, founder.jpg,
+      #     favicon.svg, assets/) — SCP overwrites them in place.
+      # The `find ... -delete` form on _next is bounded to that exact subtree,
+      # so even if _next is missing or the path is wrong, nothing else dies.
+      - name: Clean stale Next.js chunks on host
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.INFOMANIAK_HOST }}
+          username: ${{ secrets.INFOMANIAK_USER }}
+          password: ${{ secrets.INFOMANIAK_PASSWORD }}
+          port: 22
+          script: |
+            set -eu
+            TARGET="/sites/3d-medical.ch"
+            test -d "$TARGET" || { echo "Target $TARGET missing — refusing to deploy."; exit 1; }
+            if [ -d "$TARGET/_next" ]; then
+              echo "Removing stale $TARGET/_next ..."
+              rm -rf -- "$TARGET/_next"
+            else
+              echo "No previous _next/ on host — first deploy."
+            fi
+
+      - name: Deploy to Infomaniak (SCP over SSH)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.INFOMANIAK_HOST }}
+          username: ${{ secrets.INFOMANIAK_USER }}
+          password: ${{ secrets.INFOMANIAK_PASSWORD }}
+          port: 22
+          source: "out/."
+          target: "/sites/3d-medical.ch"
+          strip_components: 1
+          overwrite: true
+          # Do NOT enable rm here — that would wipe the entire target dir,
+          # including Infomaniak's .htaccess, .user.ini, and maintenance page.
+          # Cleanup is handled surgically by the SSH step above.
+          rm: false
