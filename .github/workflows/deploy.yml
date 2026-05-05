@@ -41,13 +41,17 @@ jobs:
 
       # Single-step deploy via sshpass + rsync.
       #
-      # Why not appleboy/scp-action: it requires a hard-coded absolute target
-      # path. Infomaniak shared hosting puts the SSH user inside a chroot where
-      # ~ IS the site root — there is no stable absolute path to embed.
+      # Path layout on Infomaniak shared hosting:
+      #   • SSH login lands the user in /home/clients/<accountid>/  (= $HOME).
+      #   • The site lives at ~/sites/3d-medical.ch — that's the dir whose
+      #     contents are served at https://3d-medical.ch.
+      # We do everything via a $HOME-relative path so the workflow stays
+      # portable across accounts and Infomaniak chroot boundary changes.
       #
       # Safety guards (in order):
-      #   1. Verify we're in the site root by requiring .htaccess to exist
-      #      before touching anything. If we land somewhere else, abort.
+      #   1. cd into the site dir, then refuse to proceed unless .htaccess
+      #      is present — this both confirms the path is correct and guards
+      #      against ever scribbling into the wrong directory.
       #   2. Surgically rm -rf _next (the only dir that accumulates stale
       #      hashed chunks between builds).
       #   3. rsync without --delete, so any remote-only file (.htaccess,
@@ -59,6 +63,7 @@ jobs:
           SSHPASS: ${{ secrets.INFOMANIAK_PASSWORD }}
           HOST: ${{ secrets.INFOMANIAK_HOST }}
           USER: ${{ secrets.INFOMANIAK_USER }}
+          SITE_PATH: sites/3d-medical.ch
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -66,38 +71,41 @@ jobs:
 
           SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
 
-          echo "::group::Probe remote site root"
-          sshpass -e ssh $SSH_OPTS "$USER@$HOST" '
+          echo "::group::Probe site directory"
+          sshpass -e ssh $SSH_OPTS "$USER@$HOST" "
             set -eu
-            echo "Remote pwd: $(pwd)"
+            cd \"$SITE_PATH\" || { echo 'ABORT: $SITE_PATH not found from $(pwd)'; ls -la; exit 1; }
+            echo \"Now in: \$(pwd)\"
             if [ ! -f .htaccess ]; then
-              echo "ABORT: $(pwd) does not contain .htaccess — refusing to deploy."
+              echo 'ABORT: site dir missing .htaccess — refusing to deploy.'
               ls -la
               exit 1
             fi
-            echo "Site root verified."
-          '
+            echo 'Site root verified.'
+          "
           echo "::endgroup::"
 
           echo "::group::Clean stale _next/"
-          sshpass -e ssh $SSH_OPTS "$USER@$HOST" '
+          sshpass -e ssh $SSH_OPTS "$USER@$HOST" "
             set -eu
+            cd \"$SITE_PATH\"
             if [ -d _next ]; then
-              echo "Removing stale _next/ ..."
+              echo 'Removing stale _next/ ...'
               rm -rf _next
             else
-              echo "No previous _next/ — first deploy."
+              echo 'No previous _next/ — first deploy.'
             fi
-          '
+          "
           echo "::endgroup::"
 
           echo "::group::Upload out/ via rsync"
-          # -a archive (preserves times, perms — but Infomaniak forbids chmod
-          # on shared, so we strip --no-perms/owner/group to avoid noisy errors).
+          # -rltvz: recurse, preserve symlinks/times, verbose, compress.
+          # --no-perms/owner/group: Infomaniak shared denies chmod, so don't
+          # try to set them (would produce noisy errors with no real effect).
           # No --delete: remote-only files (host dotfiles) are preserved.
           sshpass -e rsync -rltvz --no-perms --no-owner --no-group \
             -e "ssh $SSH_OPTS" \
-            out/ "$USER@$HOST:./"
+            out/ "$USER@$HOST:$SITE_PATH/"
           echo "::endgroup::"
 
           echo "Deploy complete."
