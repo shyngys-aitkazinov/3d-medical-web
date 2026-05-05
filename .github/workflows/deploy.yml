@@ -69,10 +69,32 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq sshpass rsync
 
-          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20"
+          # ssh-level retry (ConnectionAttempts) handles per-attempt connection
+          # blips; the bash retry() wrapper handles upstream issues like DNS
+          # resolution failures on the runner, where ssh never even gets to
+          # connect. Combined, the deploy is robust to one-off network hiccups.
+          SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -o ConnectionAttempts=3"
+
+          retry() {
+            # Usage: retry <max-attempts> <initial-delay-seconds> -- <cmd...>
+            local max="$1" delay="$2" attempt=1
+            shift 2
+            [ "$1" = "--" ] && shift
+            while true; do
+              if "$@"; then return 0; fi
+              if [ "$attempt" -ge "$max" ]; then
+                echo "::error::Failed after $max attempts: $*" >&2
+                return 1
+              fi
+              echo "Attempt $attempt failed; retrying in ${delay}s..." >&2
+              sleep "$delay"
+              delay=$((delay * 2))
+              attempt=$((attempt + 1))
+            done
+          }
 
           echo "::group::Probe site directory"
-          sshpass -e ssh $SSH_OPTS "$USER@$HOST" "
+          retry 3 5 -- sshpass -e ssh $SSH_OPTS "$USER@$HOST" "
             set -eu
             cd \"$SITE_PATH\" || { echo 'ABORT: $SITE_PATH not found from $(pwd)'; ls -la; exit 1; }
             echo \"Now in: \$(pwd)\"
@@ -86,7 +108,7 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Clean stale _next/"
-          sshpass -e ssh $SSH_OPTS "$USER@$HOST" "
+          retry 3 5 -- sshpass -e ssh $SSH_OPTS "$USER@$HOST" "
             set -eu
             cd \"$SITE_PATH\"
             if [ -d _next ]; then
@@ -103,7 +125,9 @@ jobs:
           # --no-perms/owner/group: Infomaniak shared denies chmod, so don't
           # try to set them (would produce noisy errors with no real effect).
           # No --delete: remote-only files (host dotfiles) are preserved.
-          sshpass -e rsync -rltvz --no-perms --no-owner --no-group \
+          # rsync is idempotent — retrying after a partial upload only
+          # transfers what's missing.
+          retry 3 5 -- sshpass -e rsync -rltvz --no-perms --no-owner --no-group \
             -e "ssh $SSH_OPTS" \
             out/ "$USER@$HOST:$SITE_PATH/"
           echo "::endgroup::"
